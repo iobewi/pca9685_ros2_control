@@ -5,30 +5,24 @@
   <ros2_control name="pca9685_ros2_control_example" type="system">
     <hardware>
       <plugin>pca9685_hardware_interface/Pca9685SystemHardware</plugin>
+      <!-- Name of the I2C device -->
+      <param name="pca9685_dev">/dev/i2c</param>
+      <!-- Addresse used for the PCA9685 communication -->
+      <param name="pca9685_addr">40</param>
+      <!-- Frencency used for the PCA9685 -->
+      <param name="pca9685_hz">50.0</param>
     </hardware>
     <joint name="joint_0">
       <command_interface name="velocity"/>
       <state_interface name="velocity"/>
+      <!-- Max RPM used for ESC -->
+      <param name="max_rpm">5600</param>
     </joint>
     <joint name="joint_1">
-      <command_interface name="velocity"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="joint_2">
-      <command_interface name="velocity"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="joint_3">
-      <command_interface name="velocity"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="joint_4">
-      <command_interface name="velocity"/>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="joint_5">
-      <command_interface name="velocity"/>
-      <state_interface name="velocity"/>
+      <command_interface name="position"/>
+      <state_interface name="position"/>
+      <!-- Max degrees used for servo --> 
+      <param name="max_degrees">180</param>
     </joint>
   </ros2_control>
 

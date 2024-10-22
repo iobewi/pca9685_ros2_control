@@ -27,6 +27,10 @@ public:
   RCLCPP_SHARED_PTR_DEFINITIONS(Pca9685SystemHardware);
 
   PCA9685_HARDWARE_INTERFACE_PUBLIC
+  hardware_interface::CallbackReturn on_configure(
+    const rclcpp_lifecycle::State & previous_state) override;
+
+  PCA9685_HARDWARE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_init(
     const hardware_interface::HardwareInfo & info) override;
 
@@ -35,6 +39,16 @@ public:
 
   PCA9685_HARDWARE_INTERFACE_PUBLIC
   std::vector<hardware_interface::CommandInterface> export_command_interfaces() override;
+
+  PCA9685_HARDWARE_INTERFACE_PUBLIC
+  hardware_interface::return_type prepare_command_mode_switch(
+    std::vector<std::string> const& start_interfaces,
+    std::vector<std::string> const& stop_interfaces) override;
+
+  PCA9685_HARDWARE_INTERFACE_PUBLIC
+  hardware_interface::return_type perform_command_mode_switch(
+    std::vector<std::string> const& start_interfaces,
+    std::vector<std::string> const& stop_interfaces) override;
 
   PCA9685_HARDWARE_INTERFACE_PUBLIC
   hardware_interface::CallbackReturn on_activate(
@@ -53,8 +67,24 @@ public:
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
 private:
+  std::vector<double> max_rpm_;
+  std::vector<double> max_degrees_ ;
+
   std::vector<double> hw_commands_;
-  PiPCA9685::PCA9685 pca;
+
+  std::vector<double> hw_commands_positions_;
+  std::vector<double> hw_states_positions_;
+  std::vector<bool> hw_runnings_positions_;
+
+  std::vector<double> hw_commands_velocities_;
+  std::vector<double> hw_states_velocities_;
+  std::vector<bool> hw_runnings_velocities_;
+
+  std::unique_ptr<PiPCA9685::PCA9685> pca_;
+  std::string pca9685_dev_;
+  int pca9685_addr_;
+  double pca9685_hz_;
+
   double command_to_duty_cycle(double command);
 };
 
