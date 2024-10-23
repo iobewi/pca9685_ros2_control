@@ -35,11 +35,24 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_configure(
     pca9685_hz_ = 50.0;
     RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "PCA9685 frequency not set, defaulting to '%f'", pca9685_hz_ );
   }
+
   pca_ = std::make_unique<PiPCA9685::PCA9685>(pca9685_dev_, pca9685_addr_);
   pca_->set_pwm_freq(pca9685_hz_);
   return CallbackReturn::SUCCESS;
 }
 
+
+hardware_interface::CallbackReturn Pca9685SystemHardware::on_cleanup(const rclcpp_lifecycle::State &)
+{
+  if (pca_) {
+    RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Cleaning up PCA9685 instance.");
+    pca_.reset();  
+    } else {
+    RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "PCA9685 instance already cleaned up.");
+  }
+  return hardware_interface::CallbackReturn::SUCCESS;
+}
+    
 hardware_interface::CallbackReturn Pca9685SystemHardware::on_init(
   const hardware_interface::HardwareInfo & info)
 {
@@ -227,7 +240,7 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_activate(
 
     if (std::isnan(hw_commands_[i])) hw_commands_[i] = 0;
   }
-
+  pca_->activate();
   RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Successfully activated!");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -246,6 +259,7 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_deactivate(
 
     pca_->set_pwm_ms(i, duty_cycle);
   }
+  pca_->shutdown();
   RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Successfully deactivated!");
   return hardware_interface::CallbackReturn::SUCCESS;
 }

@@ -1,6 +1,7 @@
 #include "pca9685_hardware_interface/pca9685_comm.h"
 #include <unistd.h>
 #include <cmath>
+#include <iostream>
 
 #include "pca9685_hardware_interface/Constants.h"
 #include "pca9685_hardware_interface/I2CPeripheral.h"
@@ -9,18 +10,29 @@ namespace PiPCA9685 {
 
 PCA9685::PCA9685(const std::string &device, int address) {
   i2c_dev = std::make_unique<I2CPeripheral>(device, address);
-  
-  set_all_pwm(0,0);
+}
+
+void PCA9685::activate() {
+  set_all_pwm(0, 0);
   i2c_dev->WriteRegisterByte(MODE2, OUTDRV);
   i2c_dev->WriteRegisterByte(MODE1, ALLCALL);
   usleep(5'000);
+
   auto mode1_val = i2c_dev->ReadRegisterByte(MODE1);
   mode1_val &= ~SLEEP;
   i2c_dev->WriteRegisterByte(MODE1, mode1_val);
   usleep(5'000);
 }
 
-PCA9685::~PCA9685() = default;
+void PCA9685::shutdown() {
+  auto mode1_val = i2c_dev->ReadRegisterByte(MODE1);
+  mode1_val |= SLEEP;
+  i2c_dev->WriteRegisterByte(MODE1, mode1_val);
+}
+
+PCA9685::~PCA9685() {
+  shutdown();
+}
 
 void PCA9685::set_pwm_freq(const double freq_hz) {
   frequency = freq_hz;

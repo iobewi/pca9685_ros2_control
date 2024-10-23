@@ -12,6 +12,9 @@ class PCA9685 {
 public:
     PCA9685(const std::string &device, int address);
     ~PCA9685();
+    void activate();
+
+    void shutdown();
 
     void set_pwm_freq(const double freq_hz);
 

@@ -35,6 +35,10 @@ public:
     const hardware_interface::HardwareInfo & info) override;
 
   PCA9685_HARDWARE_INTERFACE_PUBLIC
+  hardware_interface::CallbackReturn on_cleanup(
+    const rclcpp_lifecycle::State &);
+
+  PCA9685_HARDWARE_INTERFACE_PUBLIC
   std::vector<hardware_interface::StateInterface> export_state_interfaces() override;
 
   PCA9685_HARDWARE_INTERFACE_PUBLIC
