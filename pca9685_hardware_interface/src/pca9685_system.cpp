@@ -73,6 +73,7 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_init(
   hw_commands_velocities_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
   hw_runnings_velocities_.resize(info_.joints.size(), std::numeric_limits<bool>::quiet_NaN());
 
+  port_id_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
   max_rpm_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
   max_degrees_.resize(info_.joints.size(), std::numeric_limits<double>::quiet_NaN());
 
@@ -98,18 +99,25 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_init(
         joint.name.c_str(), joint.command_interfaces[0].name.c_str());
       return hardware_interface::CallbackReturn::ERROR;
     }
-    if (joint.parameters.find("max_rpm") != joint.parameters.end()){
-      max_rpm_.emplace_back(std::stoi(joint.parameters.at("max_rpm")));
+  }
+  for (size_t i = 0; i < info_.joints.size(); i++) {
+    if (info_.joints[i].parameters.find("port_id") != info_.joints[i].parameters.end()){
+      port_id_[i]=std::stoi(info_.joints[i].parameters.at("port_id"));
     }else{
-      max_rpm_.emplace_back(0);
+      RCLCPP_FATAL(
+        rclcpp::get_logger("Pca9685SystemHardware"),
+        "Joint '%s' has 'port_id' not set.",
+       info_.joints[i].name.c_str());
+      return hardware_interface::CallbackReturn::ERROR;
     }
-    if (joint.parameters.find("max_degrees") != joint.parameters.end()){
-      max_degrees_.emplace_back(std::stoi(joint.parameters.at("max_degrees")));
-    }else{
-      max_degrees_.emplace_back(0);
+    
+    if (info_.joints[i].parameters.find("max_rpm") != info_.joints[i].parameters.end()){
+      max_rpm_[i]=std::stoi(info_.joints[i].parameters.at("max_rpm"));
+    }
+    if (info_.joints[i].parameters.find("max_degrees") != info_.joints[i].parameters.end()){
+      max_degrees_[i]=std::stoi(info_.joints[i].parameters.at("max_degrees"));
     }
   }
-
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -124,7 +132,6 @@ std::vector<hardware_interface::StateInterface> Pca9685SystemHardware::export_st
     state_interfaces.emplace_back(hardware_interface::StateInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_states_positions_[i]));
   }
-
   return state_interfaces;
 }
 
@@ -138,7 +145,6 @@ std::vector<hardware_interface::CommandInterface> Pca9685SystemHardware::export_
     command_interfaces.emplace_back(hardware_interface::CommandInterface(
       info_.joints[i].name, hardware_interface::HW_IF_POSITION, &hw_commands_positions_[i]));
   }
-
   return command_interfaces;
 }
 
@@ -157,9 +163,9 @@ hardware_interface::return_type Pca9685SystemHardware::prepare_command_mode_swit
   for (auto const& start_interface: start_interfaces) {
     for (size_t i = 0; i < info_.joints.size(); i++) {
       if (start_interface == info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION) {
-        if (max_degrees_[i] == 0) {
+        if (std::isnan(max_degrees_[i])) {
           RCLCPP_ERROR(rclcpp::get_logger("Pca9685SystemHardware"),
-            "Can't claim position interface for joint '%s': max_degree is 0!", 
+            "Can't claim position interface for joint '%s': max_degree is NaN!", 
             info_.joints[i].name.c_str());
           return hardware_interface::return_type::ERROR;
         }
@@ -171,9 +177,9 @@ hardware_interface::return_type Pca9685SystemHardware::prepare_command_mode_swit
         }
         hw_runnings_positions_[i] = true;
       } else if (start_interface == info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY) {
-        if (max_rpm_[i] == 0) {
+        if (std::isnan(max_rpm_[i])) {
           RCLCPP_ERROR(rclcpp::get_logger("Pca9685SystemHardware"),
-             "Can't claim velocity interface for joint '%s': max_rpm is 0!", 
+             "Can't claim velocity interface for joint '%s': max_rpm is NaN!", 
             info_.joints[i].name.c_str());
           return hardware_interface::return_type::ERROR;
         }
@@ -251,13 +257,6 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_deactivate(
     for (size_t i = 0; i < info_.joints.size(); i++)
   {
     hw_commands_[i] = 0;
-    double duty_cycle = command_to_duty_cycle(hw_commands_[i]);
-
-    // RCLCPP_INFO(
-    //     rclcpp::get_logger("Pca9685SystemHardware"),
-    //     "Joint '%d' has command '%f', duty_cycle: '%f'.", i, hw_commands_[i], duty_cycle);
-
-    pca_->set_pwm_ms(i, duty_cycle);
   }
   pca_->shutdown();
   RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Successfully deactivated!");
@@ -270,9 +269,9 @@ hardware_interface::return_type Pca9685SystemHardware::read(
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
     if (hw_runnings_positions_[i]) {
-      hw_states_positions_[i] = (M_PI / 2.0) * (hw_commands_[i] + 1.0);
+      hw_states_positions_[i] = (M_PI ) * (hw_commands_[i]);
     } else if (hw_runnings_velocities_[i]) {
-      hw_states_velocities_[i] = (2.0 * M_PI * max_rpm_[i] * hw_commands_[i]) / 60.0;
+      hw_states_velocities_[i] = (M_PI * max_rpm_[i] * hw_commands_[i]) / 60.0;
       hw_states_positions_[i] += hw_states_velocities_[i] * period.seconds();
     }
   }
@@ -301,12 +300,13 @@ double Pca9685SystemHardware::command_to_duty_cycle(double command){
 hardware_interface::return_type Pca9685SystemHardware::write(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
 {
+  
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
     if (hw_runnings_positions_[i]) {
-      hw_commands_[i] = ((2.0 * hw_commands_positions_[i]) / M_PI) - 1.0;
+      hw_commands_[i] = ((hw_commands_positions_[i]) / M_PI);
     } else if (hw_runnings_velocities_[i]) {
-      hw_commands_[i] = (hw_commands_velocities_[i] * 60)/(2.0 * M_PI * max_rpm_[i]);
+      hw_commands_[i] = (hw_commands_velocities_[i] * 60)/(M_PI * max_rpm_[i]);
   }
     double duty_cycle = command_to_duty_cycle(hw_commands_[i]);
 
@@ -314,7 +314,7 @@ hardware_interface::return_type Pca9685SystemHardware::write(
     //     rclcpp::get_logger("Pca9685SystemHardware"),
     //     "Joint '%d' has command '%f', duty_cycle: '%f'.", i, hw_commands_[i], duty_cycle);
 
-    pca_->set_pwm_ms(i, duty_cycle);
+    pca_->set_pwm_ms(port_id_[i], duty_cycle);
 
   }
 

@@ -73,6 +73,7 @@ public:
 private:
   std::vector<double> max_rpm_;
   std::vector<double> max_degrees_ ;
+  std::vector<double> port_id_;
 
   std::vector<double> hw_commands_;
 
