@@ -24,7 +24,7 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_configure(
     RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "I2c device name not set, defaulting to '%s'", pca9685_dev_.c_str());
   }
   if (info_.hardware_parameters.find("pca9685_addr") != info_.hardware_parameters.end()) {
-    pca9685_addr_ = std::stoi(info_.hardware_parameters["pca9685_addr"]);
+    pca9685_addr_ = std::stoi(info_.hardware_parameters["pca9685_addr"], nullptr, 16);
   } else {
     pca9685_addr_ = 0x40;
     RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "PCA9685 address not set, defaulting to '%x'", pca9685_addr_ );
@@ -87,9 +87,13 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_init(
     }
     if (joint.parameters.find("max_rpm") != joint.parameters.end()){
       max_rpm_.emplace_back(std::stoi(joint.parameters.at("max_rpm")));
+    }else{
+      max_rpm_.emplace_back(0);
     }
     if (joint.parameters.find("max_degrees") != joint.parameters.end()){
       max_degrees_.emplace_back(std::stoi(joint.parameters.at("max_degrees")));
+    }else{
+      max_degrees_.emplace_back(0);
     }
   }
 
@@ -140,9 +144,9 @@ hardware_interface::return_type Pca9685SystemHardware::prepare_command_mode_swit
   for (auto const& start_interface: start_interfaces) {
     for (size_t i = 0; i < info_.joints.size(); i++) {
       if (start_interface == info_.joints[i].name + "/" + hardware_interface::HW_IF_POSITION) {
-        if (std::isnan(max_degrees_[i])) {
+        if (max_degrees_[i] == 0) {
           RCLCPP_ERROR(rclcpp::get_logger("Pca9685SystemHardware"),
-            "Can't claim position interface for joint '%s': max_degree is NaN!", 
+            "Can't claim position interface for joint '%s': max_degree is 0!", 
             info_.joints[i].name.c_str());
           return hardware_interface::return_type::ERROR;
         }
@@ -154,9 +158,9 @@ hardware_interface::return_type Pca9685SystemHardware::prepare_command_mode_swit
         }
         hw_runnings_positions_[i] = true;
       } else if (start_interface == info_.joints[i].name + "/" + hardware_interface::HW_IF_VELOCITY) {
-        if (std::isnan(max_rpm_[i])) {
+        if (max_rpm_[i] == 0) {
           RCLCPP_ERROR(rclcpp::get_logger("Pca9685SystemHardware"),
-             "Can't claim velocity interface for joint '%s': max_rpm is NaN!", 
+             "Can't claim velocity interface for joint '%s': max_rpm is 0!", 
             info_.joints[i].name.c_str());
           return hardware_interface::return_type::ERROR;
         }
@@ -234,13 +238,20 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_deactivate(
     for (size_t i = 0; i < info_.joints.size(); i++)
   {
     hw_commands_[i] = 0;
+    double duty_cycle = command_to_duty_cycle(hw_commands_[i]);
+
+    // RCLCPP_INFO(
+    //     rclcpp::get_logger("Pca9685SystemHardware"),
+    //     "Joint '%d' has command '%f', duty_cycle: '%f'.", i, hw_commands_[i], duty_cycle);
+
+    pca_->set_pwm_ms(i, duty_cycle);
   }
   RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Successfully deactivated!");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
 hardware_interface::return_type Pca9685SystemHardware::read(
-  const rclcpp::Time & /*time*/, const rclcpp::Duration & /*period*/)
+  const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
