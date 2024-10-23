@@ -248,6 +248,7 @@ hardware_interface::return_type Pca9685SystemHardware::read(
       hw_states_positions_[i] = (M_PI / 2.0) * (hw_commands_[i] + 1.0);
     } else if (hw_runnings_velocities_[i]) {
       hw_states_velocities_[i] = (2.0 * M_PI * max_rpm_[i] * hw_commands_[i]) / 60.0;
+      hw_states_positions_[i] += hw_states_velocities_[i] * period.seconds();
     }
   }
 
