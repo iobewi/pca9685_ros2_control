@@ -9,6 +9,7 @@ extern "C" {
 }
 #include <cerrno>
 #include <system_error>
+#include <iostream>
 
 namespace PiPCA9685 {
 
@@ -18,7 +19,13 @@ I2CPeripheral::I2CPeripheral(const std::string& device, const uint8_t address) {
 }
 
 I2CPeripheral::~I2CPeripheral() {
-  close(bus_fd);
+  if (bus_fd >= 0) {
+    if (close(bus_fd) != 0) {
+      const int errsv = errno;
+      std::cerr << "Failed to close I2C bus fd " << bus_fd << ": "
+                << std::system_category().message(errsv) << std::endl;
+    }
+  }
 }
 
 void I2CPeripheral::WriteRegisterByte(const uint8_t register_address, const uint8_t value) {

@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 #include <vector>
+#include <stdexcept>
 
 #include "hardware_interface/types/hardware_interface_type_values.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -22,23 +23,106 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_configure(
     pca9685_dev_ = info_.hardware_parameters["pca9685_dev"];
   } else {
     pca9685_dev_ = "/dev/i2c-1";
-    RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "I2c device name not set, defaulting to '%s'", pca9685_dev_.c_str());
-  }
-  if (info_.hardware_parameters.find("pca9685_addr") != info_.hardware_parameters.end()) {
-    pca9685_addr_ = std::stoi(info_.hardware_parameters["pca9685_addr"], nullptr, 16);
-  } else {
-    pca9685_addr_ = 0x40;
-    RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "PCA9685 address not set, defaulting to '%x'", pca9685_addr_ );
-  }
-  if (info_.hardware_parameters.find("pca9685_hz") != info_.hardware_parameters.end()) {
-    pca9685_hz_ = std::stod(info_.hardware_parameters["pca9685_hz"]);
-  } else {
-    pca9685_hz_ = 50.0;
-    RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "PCA9685 frequency not set, defaulting to '%f'", pca9685_hz_ );
+    RCLCPP_INFO(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "I2c device name not set, defaulting to '%s'", pca9685_dev_.c_str());
   }
 
-  pca_ = std::make_unique<PiPCA9685::PCA9685>(pca9685_dev_, pca9685_addr_);
-  pca_->set_pwm_freq(pca9685_hz_);
+  if (info_.hardware_parameters.find("pca9685_addr") != info_.hardware_parameters.end()) {
+    try {
+      pca9685_addr_ = std::stoi(info_.hardware_parameters["pca9685_addr"], nullptr, 16);
+    } catch (const std::exception &e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("Pca9685SystemHardware"),
+        "Invalid PCA9685 address '%s': %s",
+        info_.hardware_parameters["pca9685_addr"].c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
+  } else {
+    pca9685_addr_ = 0x40;
+    RCLCPP_INFO(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "PCA9685 address not set, defaulting to '%x'", pca9685_addr_);
+  }
+
+  if (pca9685_addr_ < 0 || pca9685_addr_ > 0x7F) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "PCA9685 address '%x' is out of range [0x00, 0x7F].",
+      pca9685_addr_);
+    return CallbackReturn::ERROR;
+  }
+
+  if (info_.hardware_parameters.find("pca9685_hz") != info_.hardware_parameters.end()) {
+    try {
+      pca9685_hz_ = std::stod(info_.hardware_parameters["pca9685_hz"]);
+    } catch (const std::exception &e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("Pca9685SystemHardware"),
+        "Invalid PCA9685 frequency '%s': %s",
+        info_.hardware_parameters["pca9685_hz"].c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
+  } else {
+    pca9685_hz_ = 50.0;
+    RCLCPP_INFO(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "PCA9685 frequency not set, defaulting to '%f'", pca9685_hz_);
+  }
+
+  if (pca9685_hz_ <= 0.0) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "PCA9685 frequency must be positive. Current value: %f",
+      pca9685_hz_);
+    return CallbackReturn::ERROR;
+  }
+
+  if (info_.hardware_parameters.find("pulse_min_us") != info_.hardware_parameters.end()) {
+    try {
+      pulse_min_us_ = std::stod(info_.hardware_parameters["pulse_min_us"]);
+    } catch (const std::exception &e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("Pca9685SystemHardware"),
+        "Invalid pulse_min_us '%s': %s",
+        info_.hardware_parameters["pulse_min_us"].c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
+  }
+
+  if (info_.hardware_parameters.find("pulse_max_us") != info_.hardware_parameters.end()) {
+    try {
+      pulse_max_us_ = std::stod(info_.hardware_parameters["pulse_max_us"]);
+    } catch (const std::exception &e) {
+      RCLCPP_ERROR(
+        rclcpp::get_logger("Pca9685SystemHardware"),
+        "Invalid pulse_max_us '%s': %s",
+        info_.hardware_parameters["pulse_max_us"].c_str(), e.what());
+      return CallbackReturn::ERROR;
+    }
+  }
+
+  if (pulse_min_us_ <= 0.0 || pulse_max_us_ <= 0.0 || pulse_min_us_ >= pulse_max_us_) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "Invalid PWM pulse width bounds [min: %f us, max: %f us].",
+      pulse_min_us_, pulse_max_us_);
+    return CallbackReturn::ERROR;
+  }
+
+  try {
+    pca_ = std::make_unique<PiPCA9685::PCA9685>(pca9685_dev_, pca9685_addr_);
+    pca_->set_pwm_freq(pca9685_hz_);
+  } catch (const std::exception &e) {
+    RCLCPP_ERROR(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "Failed to initialize PCA9685 device: %s", e.what());
+    pca_.reset();
+    return CallbackReturn::ERROR;
+  }
+
+  open_loop_warning_logged_ = false;
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -47,8 +131,8 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_cleanup(const rclcp
 {
   if (pca_) {
     RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Cleaning up PCA9685 instance.");
-    pca_.reset();  
-    } else {
+    pca_.reset();
+  } else {
     RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "PCA9685 instance already cleaned up.");
   }
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -155,9 +239,24 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_init(
       }
     }
 
-    if (joint.parameters.find("port_id") != joint.parameters.end()){
-      port_id_[i]=std::stoi(joint.parameters.at("port_id"));
-    }else{
+    if (joint.parameters.find("port_id") != joint.parameters.end()) {
+      try {
+        port_id_[i] = std::stoi(joint.parameters.at("port_id"));
+      } catch (const std::exception &e) {
+        RCLCPP_FATAL(
+          rclcpp::get_logger("Pca9685SystemHardware"),
+          "Joint '%s' has invalid 'port_id' value '%s': %s",
+          joint.name.c_str(), joint.parameters.at("port_id").c_str(), e.what());
+        return hardware_interface::CallbackReturn::ERROR;
+      }
+      if (port_id_[i] < 0 || port_id_[i] > 15) {
+        RCLCPP_FATAL(
+          rclcpp::get_logger("Pca9685SystemHardware"),
+          "Joint '%s' has 'port_id' out of range [0,15].",
+          joint.name.c_str());
+        return hardware_interface::CallbackReturn::ERROR;
+      }
+    } else {
       RCLCPP_FATAL(
         rclcpp::get_logger("Pca9685SystemHardware"),
         "Joint '%s' has 'port_id' not set.",
@@ -165,14 +264,38 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_init(
       return hardware_interface::CallbackReturn::ERROR;
     }
     if (joint.parameters.find("reverse_command") != joint.parameters.end()) {
-      invert_signal_[i] =  std::stoi(joint.parameters.at("reverse_command"));
+      try {
+        invert_signal_[i] = static_cast<bool>(std::stoi(joint.parameters.at("reverse_command")));
+      } catch (const std::exception &e) {
+        RCLCPP_FATAL(
+          rclcpp::get_logger("Pca9685SystemHardware"),
+          "Joint '%s' has invalid 'reverse_command' value '%s': %s",
+          joint.name.c_str(), joint.parameters.at("reverse_command").c_str(), e.what());
+        return hardware_interface::CallbackReturn::ERROR;
+      }
     }
     if (joint.parameters.find("max_rpm") != joint.parameters.end()){
-      max_rpm_[i]=std::stod(joint.parameters.at("max_rpm"));
+      try {
+        max_rpm_[i]=std::stod(joint.parameters.at("max_rpm"));
+      } catch (const std::exception &e) {
+        RCLCPP_FATAL(
+          rclcpp::get_logger("Pca9685SystemHardware"),
+          "Joint '%s' has invalid 'max_rpm' value '%s': %s",
+          joint.name.c_str(), joint.parameters.at("max_rpm").c_str(), e.what());
+        return hardware_interface::CallbackReturn::ERROR;
+      }
     }
     if (joint.parameters.find("max_degrees") != joint.parameters.end()){
-      const double max_degrees = std::stod(joint.parameters.at("max_degrees"));
-      max_angle_rad_[i] = max_degrees * M_PI / 180.0;
+      try {
+        const double max_degrees = std::stod(joint.parameters.at("max_degrees"));
+        max_angle_rad_[i] = max_degrees * M_PI / 180.0;
+      } catch (const std::exception &e) {
+        RCLCPP_FATAL(
+          rclcpp::get_logger("Pca9685SystemHardware"),
+          "Joint '%s' has invalid 'max_degrees' value '%s': %s",
+          joint.name.c_str(), joint.parameters.at("max_degrees").c_str(), e.what());
+        return hardware_interface::CallbackReturn::ERROR;
+      }
     }
   }
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -326,6 +449,13 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_activate(
       "Cannot activate hardware: PCA9685 instance is null.");
     return hardware_interface::CallbackReturn::ERROR;
   }
+  try {
+    pca_->activate();
+  } catch (const std::exception &e) {
+    RCLCPP_ERROR(rclcpp::get_logger("Pca9685SystemHardware"),
+      "Failed to activate PCA9685: %s", e.what());
+    return hardware_interface::CallbackReturn::ERROR;
+  }
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
     if (std::isnan(hw_commands_positions_[i])) hw_commands_positions_[i] = 0.0;
@@ -336,7 +466,6 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_activate(
 
     if (std::isnan(hw_commands_[i])) hw_commands_[i] = 0;
   }
-  pca_->activate();
   RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Successfully activated!");
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -349,7 +478,12 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_deactivate(
     hw_commands_[i] = 0;
   }
   if (pca_) {
-    pca_->shutdown();
+    try {
+      pca_->shutdown();
+    } catch (const std::exception &e) {
+      RCLCPP_WARN(rclcpp::get_logger("Pca9685SystemHardware"),
+        "Failed to shutdown PCA9685 cleanly: %s", e.what());
+    }
   }
   RCLCPP_INFO(rclcpp::get_logger("Pca9685SystemHardware"), "Successfully deactivated!");
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -358,6 +492,12 @@ hardware_interface::CallbackReturn Pca9685SystemHardware::on_deactivate(
 hardware_interface::return_type Pca9685SystemHardware::read(
   const rclcpp::Time & /*time*/, const rclcpp::Duration & period)
 {
+  if (!open_loop_warning_logged_) {
+    RCLCPP_WARN(
+      rclcpp::get_logger("Pca9685SystemHardware"),
+      "PCA9685 hardware operates in open-loop: state values are derived from commands.");
+    open_loop_warning_logged_ = true;
+  }
   for (size_t i = 0; i < info_.joints.size(); i++)
   {
     if (hw_runnings_positions_[i]) {
@@ -386,24 +526,22 @@ hardware_interface::return_type Pca9685SystemHardware::read(
   return hardware_interface::return_type::OK;
 }
 
-double Pca9685SystemHardware::command_to_duty_cycle(double command){
+double Pca9685SystemHardware::command_to_pulse_width_ms(double command) const
+{
+  constexpr double min_input = -1.0;
+  constexpr double max_input = 1.0;
 
-    double min_input = -1.0;
-    double max_input = 1.0;
+  const double clamped_command = std::clamp(command, min_input, max_input);
 
-    double clamped_command = std::clamp(command, min_input, max_input);
+  const double min_pulse_ms = pulse_min_us_ / 1000.0;
+  const double max_pulse_ms = pulse_max_us_ / 1000.0;
 
-    double min_duty_cycle = 0.5;
-    double max_duty_cycle = 2.5;
+  const double slope = (max_pulse_ms - min_pulse_ms) / (max_input - min_input);
+  const double offset = (max_pulse_ms + min_pulse_ms) / 2.0;
 
+  const double pulse_ms = slope * clamped_command + offset;
 
-    double slope = (max_duty_cycle-min_duty_cycle)/(max_input-min_input);
-    double offset = (max_duty_cycle+min_duty_cycle)/2;
-
-    double duty_cycle = slope * clamped_command + offset;
-
-    return std::clamp(duty_cycle, min_duty_cycle, max_duty_cycle);
-
+  return std::clamp(pulse_ms, min_pulse_ms, max_pulse_ms);
 }
 
 hardware_interface::return_type Pca9685SystemHardware::write(
@@ -453,13 +591,19 @@ hardware_interface::return_type Pca9685SystemHardware::write(
     normalized_command = std::clamp(normalized_command, -1.0, 1.0);
     hw_commands_[i] = normalized_command;
 
-    double duty_cycle = command_to_duty_cycle(normalized_command);
+    double pulse_width_ms = command_to_pulse_width_ms(normalized_command);
 
     // RCLCPP_INFO(
     //     rclcpp::get_logger("Pca9685SystemHardware"),
-    //     "Joint '%ld' has command '%f', duty_cycle: '%f'.", i, hw_commands_[i], duty_cycle);
+    //     "Joint '%ld' has command '%f', pulse_width_ms: '%f'.", i, hw_commands_[i], pulse_width_ms);
 
-    pca_->set_pwm_ms(port_id_[i], duty_cycle);
+    try {
+      pca_->set_pwm_pulse_width_ms(port_id_[i], pulse_width_ms);
+    } catch (const std::exception &e) {
+      RCLCPP_ERROR(rclcpp::get_logger("Pca9685SystemHardware"),
+        "Failed to set PWM for joint '%s': %s", info_.joints[i].name.c_str(), e.what());
+      return hardware_interface::return_type::ERROR;
+    }
 
   }
 

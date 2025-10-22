@@ -96,7 +96,11 @@ private:
   int pca9685_addr_;
   double pca9685_hz_;
 
-  double command_to_duty_cycle(double command);
+  double command_to_pulse_width_ms(double command) const;
+
+  double pulse_min_us_{500.0};
+  double pulse_max_us_{2500.0};
+  bool open_loop_warning_logged_{false};
 };
 
 }  // namespace pca9685_hardware_interface
