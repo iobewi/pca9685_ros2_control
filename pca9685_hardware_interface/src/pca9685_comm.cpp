@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 
 #include "pca9685_hardware_interface/Constants.h"
 #include "pca9685_hardware_interface/I2CPeripheral.h"
@@ -57,6 +58,9 @@ void PCA9685::set_pwm_freq(const double freq_hz) {
 }
 
 void PCA9685::set_pwm(const int channel, const uint16_t on, const uint16_t off) {
+  if (channel < 0 || channel >= 16) {
+    throw std::out_of_range("PCA9685 channel index must be in [0, 15]");
+  }
   const auto channel_offset = 4 * channel;
   i2c_dev->WriteRegisterByte(LED0_ON_L+channel_offset, on & 0xFF);
   i2c_dev->WriteRegisterByte(LED0_ON_H+channel_offset, on >> 8);
@@ -71,7 +75,10 @@ void PCA9685::set_all_pwm(const uint16_t on, const uint16_t off) {
   i2c_dev->WriteRegisterByte(ALL_LED_OFF_H, off >> 8);
 }
 
-void PCA9685::set_pwm_ms(const int channel, const double ms) {
+void PCA9685::set_pwm_pulse_width_ms(const int channel, const double ms) {
+  if (channel < 0 || channel >= 16) {
+    throw std::out_of_range("PCA9685 channel index must be in [0, 15]");
+  }
   const auto period_ms = 1000.0 / frequency;
   const auto constrained_ms = std::clamp(ms, 0.0, period_ms);
   const auto bits_per_ms = 4095.0 / period_ms;

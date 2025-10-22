@@ -22,7 +22,7 @@ public:
 
     void set_all_pwm(const uint16_t on, const uint16_t off);
 
-    void set_pwm_ms(const int channel, const double ms);
+    void set_pwm_pulse_width_ms(const int channel, const double ms);
 
 private:
     std::unique_ptr<I2CPeripheral> i2c_dev;
