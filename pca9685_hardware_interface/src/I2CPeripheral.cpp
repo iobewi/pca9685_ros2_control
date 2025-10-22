@@ -7,6 +7,7 @@ extern "C" {
 #include <linux/i2c-dev.h>
 #include <i2c/smbus.h>
 }
+#include <cerrno>
 #include <system_error>
 
 namespace PiPCA9685 {
@@ -24,18 +25,20 @@ void I2CPeripheral::WriteRegisterByte(const uint8_t register_address, const uint
   i2c_smbus_data data;
   data.byte = value;
   const auto err = i2c_smbus_access(bus_fd, I2C_SMBUS_WRITE, register_address, I2C_SMBUS_BYTE_DATA, &data);
-  if(err) {
+  if(err < 0) {
+    const auto errsv = errno != 0 ? errno : -err;
     const auto msg = "Could not write value (" + std::to_string(value) + ") to register " + std::to_string(register_address);
-    throw std::system_error(errno, std::system_category(), msg);
+    throw std::system_error(errsv, std::system_category(), msg);
   }
 }
 
 uint8_t I2CPeripheral::ReadRegisterByte(const uint8_t register_address) {
   i2c_smbus_data data;
   const auto err = i2c_smbus_access(bus_fd, I2C_SMBUS_READ, register_address, I2C_SMBUS_BYTE_DATA, &data);
-  if(err) {
+  if(err < 0) {
+    const auto errsv = errno != 0 ? errno : -err;
     const auto msg = "Could not read value at register " + std::to_string(register_address);
-    throw std::system_error(-err, std::system_category(), msg);
+    throw std::system_error(errsv, std::system_category(), msg);
   }
   return data.byte & 0xFF;
 }

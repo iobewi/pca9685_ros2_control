@@ -19,6 +19,9 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+endif()
 foreach(Dependency IN ITEMS ${THIS_PACKAGE_INCLUDE_DEPENDS})
   find_package(${Dependency} REQUIRED)
 endforeach()
@@ -43,6 +46,15 @@ ament_target_dependencies(
   pca9685_hardware_interface PUBLIC
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
+
+if(BUILD_TESTING)
+  ament_add_gtest(i2c_peripheral_error_test
+    test/i2c_peripheral_error_test.cpp
+  )
+  target_link_libraries(i2c_peripheral_error_test
+    pca9685_hardware_interface
+  )
+endif()
 
 # Causes the visibility macros to use dllexport rather than dllimport,
 # which is appropriate when building the dll but not consuming it.
