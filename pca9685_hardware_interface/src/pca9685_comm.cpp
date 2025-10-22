@@ -1,5 +1,6 @@
 #include "pca9685_hardware_interface/pca9685_comm.h"
 #include <unistd.h>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -71,10 +72,12 @@ void PCA9685::set_all_pwm(const uint16_t on, const uint16_t off) {
 }
 
 void PCA9685::set_pwm_ms(const int channel, const double ms) {
-  auto period_ms = 1000.0 / frequency;
-  auto bits_per_ms = 4096 / period_ms;
-  auto bits = ms * bits_per_ms;
-  set_pwm(channel, 0, bits);
+  const auto period_ms = 1000.0 / frequency;
+  const auto constrained_ms = std::clamp(ms, 0.0, period_ms);
+  const auto bits_per_ms = 4095.0 / period_ms;
+  const auto raw_bits = constrained_ms * bits_per_ms;
+  const auto bounded_bits = std::clamp(raw_bits, 0.0, 4095.0);
+  set_pwm(channel, 0, static_cast<uint16_t>(bounded_bits));
 }
 
 }  // namespace PiPCA9685
