@@ -72,9 +72,14 @@ public:
 
 private:
   std::vector<double> max_rpm_;
-  std::vector<double> max_degrees_ ;
-  std::vector<double> port_id_;
+  std::vector<double> max_angle_rad_;
+  std::vector<int> port_id_;
   std::vector<bool> invert_signal_;
+
+  std::vector<bool> has_position_command_;
+  std::vector<bool> has_velocity_command_;
+  std::vector<bool> has_position_state_;
+  std::vector<bool> has_velocity_state_;
 
   std::vector<double> hw_commands_;
 
