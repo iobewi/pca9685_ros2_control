@@ -7,9 +7,9 @@
       <plugin>pca9685_hardware_interface/Pca9685SystemHardware</plugin>
       <!-- Name of the I2C device -->
       <param name="pca9685_dev">/dev/i2c</param>
-      <!-- Addresse used for the PCA9685 communication -->
+      <!-- Address used for the PCA9685 communication -->
       <param name="pca9685_addr">0x40</param>
-      <!-- Frencency used for the PCA9685 -->
+      <!-- Frequency used for the PCA9685 -->
       <param name="pca9685_hz">50.0</param>
     </hardware>
     <joint name="joint_0">
