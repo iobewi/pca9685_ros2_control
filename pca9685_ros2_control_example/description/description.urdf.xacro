@@ -5,8 +5,8 @@
   <ros2_control name="pca9685_ros2_control_example" type="system">
     <hardware>
       <plugin>pca9685_hardware_interface/Pca9685SystemHardware</plugin>
-      <!-- Name of the I2C device -->
-      <param name="pca9685_dev">/dev/i2c</param>
+      <!-- Path to the I2C device (update the bus index to match your hardware setup) -->
+      <param name="pca9685_dev">/dev/i2c-1</param>
       <!-- Address used for the PCA9685 communication -->
       <param name="pca9685_addr">0x40</param>
       <!-- Frequency used for the PCA9685 -->
